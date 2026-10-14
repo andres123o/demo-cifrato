@@ -49,16 +49,26 @@ export type DatosContacto = {
   fuente: string; // una de OPCIONES_FUENTE o el texto libre de "Otro"
 };
 
+// Pregunta nueva: solo para firmas contables y contadores. Con esto se estima su volumen.
+export const OPCIONES_EMPRESAS = ["1 a 5", "6 a 20", "21 a 50", "Más de 50"] as const;
+export type RangoEmpresas = (typeof OPCIONES_EMPRESAS)[number];
+
+// Firmas y contadores manejan varias empresas; la empresa individual solo la suya.
+export const manejaEmpresas = (t: string) => t === "Firma contable" || t === "Contador independiente";
+
 export type DatosEmpresa = {
   tipoEmpresa: TipoEmpresa | "";
   nombreEmpresa: string;
+  nit: string; // nuevo, opcional: con él se consulta el registro
   erps: string[];
+  empresas: RangoEmpresas | ""; // nuevo: solo firmas y contadores
   facturas: RangoFacturas | "";
 };
 
 // Validaciones del original.
 export const REGEX_CELULAR = /^\+573\d{9}$/;
 export const REGEX_CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const REGEX_NIT = /^\d{9,10}$/; // sin puntos ni dígito de verificación
 
 export type Destino =
   | { tipo: "erp_no_soportado" }

@@ -1,6 +1,6 @@
-// Campañas de seguimiento, al estilo de un workflow de Customer.io: un disparador según dónde quedó
-// el interesado (y lo que anotó el asesor después de la reunión) y una secuencia por días y canales.
-// Es solo la estructura para mostrar: no envía nada.
+// Journeys de retención, desde la firma hasta la renovación, como workflows de HubSpot.
+// Cada uno es independiente: se activa con un evento del producto, tiene un objetivo (el siguiente
+// evento) y la cuenta sale en cuanto lo cumple. Es solo la estructura para mostrar: no envía nada.
 import type { Lead } from "./panel.ts";
 
 export type Canal = "email" | "whatsapp";
@@ -8,277 +8,268 @@ export type PasoCampana =
   | { tipo: "espera"; dias: number; texto?: string }
   | { tipo: "mensaje"; canal: Canal; titulo: string; texto: string }
   | { tipo: "tarea"; titulo: string; texto: string }
-  | { tipo: "actualizar"; titulo: string }
   | { tipo: "condicion"; pregunta: string; ramas: { nombre: string; pasos: PasoCampana[]; principal?: boolean }[] }
   | { tipo: "fin"; titulo: string };
 
+export type Etapa = "Configuración" | "Uso" | "Renovación";
+
 export type Campana = {
   id: string;
-  grupo: "Antes de la reunión" | "En seguimiento" | "No cerró" | "Cerró";
+  etapa: Etapa;
   nombre: string;
+  evento: string; // evento del producto que inscribe la cuenta
   disparador: string;
+  meta: string; // evento objetivo: al cumplirlo, la cuenta sale
   objetivo: string;
-  sale: string;
+  persona: string; // cuándo entra el especialista
   pasos: PasoCampana[];
 };
 
 export const CAMPANAS: Campana[] = [
   {
-    id: "antes",
-    grupo: "Antes de la reunión",
-    nombre: "Confirmación y recordatorios",
-    disparador: "Agendó una reunión",
-    objetivo: "Que asista a la reunión",
-    sale: "Cuando asiste o reagenda",
-    pasos: [
-      { tipo: "mensaje", canal: "whatsapp", titulo: "Confirmación", texto: "Hola {{nombre}}, tu {{reunion}} quedó para el {{fecha}}. Te enviamos el enlace al correo." },
-      { tipo: "espera", dias: 0, texto: "Hasta 24 horas antes" },
-      { tipo: "mensaje", canal: "email", titulo: "Prepara tu reunión", texto: "Ten a mano tu acceso a la DIAN y a {{erp}} para verlo con tus propias facturas." },
-      { tipo: "espera", dias: 0, texto: "Hasta 1 hora antes" },
-      { tipo: "mensaje", canal: "whatsapp", titulo: "Recordatorio", texto: "En una hora nos vemos por Google Meet: {{enlace}}" },
-      {
-        tipo: "condicion",
-        pregunta: "¿Asistió?",
-        ramas: [
-          { nombre: "Sí", pasos: [{ tipo: "fin", titulo: "Pasa a lo que anote el asesor" }] },
-          {
-            nombre: "No",
-            principal: true,
-            pasos: [
-              { tipo: "mensaje", canal: "whatsapp", titulo: "¿Buscamos otro horario?", texto: "Te esperamos hoy, {{nombre}}. Elige otro horario aquí: {{agenda}}" },
-              { tipo: "espera", dias: 2 },
-              { tipo: "mensaje", canal: "email", titulo: "Último intento", texto: "Guardamos tu análisis de {{empresa}}. Cuando quieras, retomamos." },
-              { tipo: "fin", titulo: "Pasa a No asistió" },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "aclaracion",
-    grupo: "Antes de la reunión",
-    nombre: "Pregunta sin responder",
-    disparador: "Agendó sin responder la pregunta de aclaración",
-    objetivo: "Clasificar bien la reunión antes de que ocurra",
-    sale: "Cuando responde",
-    pasos: [
-      { tipo: "espera", dias: 0, texto: "Esperar 2 horas" },
-      { tipo: "mensaje", canal: "whatsapp", titulo: "Una pregunta rápida", texto: "Para preparar tu reunión: {{pregunta}}" },
-      {
-        tipo: "condicion",
-        pregunta: "¿Respondió?",
-        ramas: [
-          { nombre: "Sí", pasos: [{ tipo: "actualizar", titulo: "Reclasificar la reunión" }, { tipo: "fin", titulo: "Sale de la campaña" }] },
-          {
-            nombre: "No",
-            principal: true,
-            pasos: [
-              { tipo: "espera", dias: 1 },
-              { tipo: "mensaje", canal: "email", titulo: "Recordatorio de la pregunta", texto: "Con tu respuesta llegamos a la reunión con propuestas para {{empresa}}." },
-              { tipo: "tarea", titulo: "El asesor confirma en la reunión", texto: "Preguntar: {{pregunta}}" },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "propuesta",
-    grupo: "En seguimiento",
-    nombre: "Pidió propuesta",
-    disparador: "El asesor anotó: pidió propuesta",
-    objetivo: "Cerrar en los siguientes 7 días",
-    sale: "Cuando cierra o dice que no",
-    pasos: [
-      { tipo: "mensaje", canal: "email", titulo: "Tu propuesta", texto: "Propuesta para {{empresa}}: {{facturas}} facturas al mes en {{erp}}, con implementación por etapas." },
-      { tipo: "espera", dias: 2 },
-      {
-        tipo: "condicion",
-        pregunta: "¿Abrió la propuesta?",
-        ramas: [
-          { nombre: "Sí", pasos: [{ tipo: "mensaje", canal: "whatsapp", titulo: "¿Resolvemos dudas?", texto: "Hola {{nombre}}, ¿revisamos juntos la propuesta en 15 minutos?" }] },
-          {
-            nombre: "No",
-            principal: true,
-            pasos: [{ tipo: "mensaje", canal: "email", titulo: "La propuesta en 3 puntos", texto: "Lo esencial para {{empresa}}: qué se automatiza, en cuánto tiempo y cuánto cuesta." }],
-          },
-        ],
-      },
-      { tipo: "espera", dias: 4 },
-      { tipo: "tarea", titulo: "Llamada de cierre", texto: "El asesor llama con el contexto de la reunión y las respuestas." },
-      {
-        tipo: "condicion",
-        pregunta: "¿Cerró?",
-        ramas: [
-          { nombre: "Sí", pasos: [{ tipo: "fin", titulo: "Pasa a Bienvenida" }] },
-          { nombre: "No", principal: true, pasos: [{ tipo: "fin", titulo: "Pasa a No cerró, según el motivo" }] },
-        ],
-      },
-    ],
-  },
-  {
-    id: "activacion",
-    grupo: "En seguimiento",
-    nombre: "Sin respuesta después de la reunión",
-    disparador: "Tuvo la reunión y no volvió a responder en 3 días",
-    objetivo: "Reactivar la conversación y llevarla al cierre",
-    sale: "Cuando responde o agenda",
-    pasos: [
-      { tipo: "mensaje", canal: "whatsapp", titulo: "Lo que vimos juntos", texto: "Hola {{nombre}}, te dejo el resumen de tu reunión y el siguiente paso para {{empresa}}." },
-      { tipo: "espera", dias: 3 },
-      {
-        tipo: "condicion",
-        pregunta: "¿Respondió?",
-        ramas: [
-          { nombre: "Sí", pasos: [{ tipo: "tarea", titulo: "Retomar con el asesor", texto: "Llamar con el contexto de la reunión y lo que respondió." }] },
-          {
-            nombre: "No",
-            principal: true,
-            pasos: [
-              { tipo: "mensaje", canal: "email", titulo: "Pruébalo con tus facturas", texto: "Activa 3 días gratis con 50 facturas de {{empresa}}, sin reunión de por medio." },
-              { tipo: "espera", dias: 4 },
-              { tipo: "mensaje", canal: "whatsapp", titulo: "¿Te ayudo a empezar?", texto: "{{nombre}}, ¿conectamos la DIAN en 10 minutos y ves tus primeras facturas causadas?" },
-              { tipo: "espera", dias: 7 },
-              { tipo: "mensaje", canal: "email", titulo: "Último mensaje", texto: "No te escribimos más por ahora. Cuando quieras retomar, tu análisis sigue aquí." },
-              { tipo: "fin", titulo: "Pasa a No es el momento" },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "decision",
-    grupo: "En seguimiento",
-    nombre: "Lo decide con otra persona",
-    disparador: "El asesor anotó: lo consulta con su socio o jefe",
-    objetivo: "Llegar a quien decide",
-    sale: "Cuando agenda con quien decide",
-    pasos: [
-      { tipo: "mensaje", canal: "email", titulo: "Resumen para compartir", texto: "Un resumen de una página para compartir con quien decide en {{empresa}}." },
-      { tipo: "espera", dias: 2 },
-      { tipo: "mensaje", canal: "whatsapp", titulo: "Un caso parecido", texto: "Así redujo una firma como {{empresa}} su cierre contable de 5 días a 1." },
-      { tipo: "espera", dias: 4 },
-      { tipo: "tarea", titulo: "Proponer reunión con quien decide", texto: "Ofrecer 20 minutos con el socio o jefe." },
-    ],
-  },
-  {
-    id: "precio",
-    grupo: "No cerró",
-    nombre: "Por precio",
-    disparador: "El asesor anotó: no cerró por precio",
-    objetivo: "Mostrar el costo de no automatizar",
-    sale: "Cuando acepta el piloto o pasan 60 días",
-    pasos: [
-      { tipo: "espera", dias: 2 },
-      { tipo: "mensaje", canal: "email", titulo: "Lo que cuesta digitar", texto: "{{facturas}} facturas al mes son cerca de {{horas}} horas de digitación. Así se compara con Cifrato." },
-      { tipo: "espera", dias: 7 },
-      { tipo: "mensaje", canal: "whatsapp", titulo: "Piloto sin compromiso", texto: "¿Probamos 30 días con una sola empresa, {{nombre}}?" },
-      {
-        tipo: "condicion",
-        pregunta: "¿Aceptó el piloto?",
-        ramas: [
-          { nombre: "Sí", pasos: [{ tipo: "tarea", titulo: "Activar el piloto", texto: "El asesor configura la empresa de prueba." }] },
-          {
-            nombre: "No",
-            principal: true,
-            pasos: [
-              { tipo: "espera", dias: 60 },
-              { tipo: "mensaje", canal: "email", titulo: "Novedades y nuevo plan", texto: "Hay un plan nuevo para firmas como {{empresa}}." },
-              { tipo: "fin", titulo: "Sale de la campaña" },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "no_asistio",
-    grupo: "No cerró",
-    nombre: "No asistió",
-    disparador: "No se conectó a la reunión",
-    objetivo: "Recuperar la reunión",
-    sale: "Cuando reagenda",
-    pasos: [
-      { tipo: "mensaje", canal: "whatsapp", titulo: "¿Reagendamos?", texto: "Hola {{nombre}}, no alcanzamos a vernos. Elige otro horario: {{agenda}}" },
-      { tipo: "espera", dias: 2 },
-      { tipo: "mensaje", canal: "email", titulo: "Tu análisis te espera", texto: "Preparamos el análisis de {{empresa}}. Míralo en 20 minutos cuando quieras." },
-      { tipo: "espera", dias: 5 },
-      { tipo: "mensaje", canal: "whatsapp", titulo: "Demo grupal", texto: "Si prefieres, únete a la próxima demo grupal: {{agenda_grupal}}" },
-      { tipo: "fin", titulo: "Pasa a la demo grupal" },
-    ],
-  },
-  {
-    id: "momento",
-    grupo: "No cerró",
-    nombre: "No es el momento",
-    disparador: "El asesor anotó: no es el momento",
-    objetivo: "Volver cuando esté listo",
-    sale: "Cuando responde",
-    pasos: [
-      { tipo: "espera", dias: 30 },
-      { tipo: "mensaje", canal: "email", titulo: "Lo nuevo en Cifrato", texto: "Nuevas integraciones y lo que mejoramos este mes." },
-      { tipo: "espera", dias: 30 },
-      { tipo: "mensaje", canal: "whatsapp", titulo: "¿Retomamos?", texto: "Hola {{nombre}}, ¿ya es buen momento para {{empresa}}?" },
-      {
-        tipo: "condicion",
-        pregunta: "¿Respondió?",
-        ramas: [
-          { nombre: "Sí", pasos: [{ tipo: "tarea", titulo: "Agendar con el mismo asesor", texto: "Retomar desde lo que quedó anotado." }] },
-          { nombre: "No", principal: true, pasos: [{ tipo: "fin", titulo: "Sale de la campaña" }] },
-        ],
-      },
-    ],
-  },
-  {
     id: "bienvenida",
-    grupo: "Cerró",
-    nombre: "Bienvenida",
-    disparador: "El asesor anotó: cerró",
-    objetivo: "Primeras facturas causadas en 7 días",
-    sale: "Al cumplir 30 días",
+    etapa: "Configuración",
+    nombre: "Bienvenida y DIAN",
+    evento: "cuenta_creada",
+    disparador: "Firmó el contrato",
+    meta: "dian_conectada",
+    objetivo: "Conecta la DIAN",
+    persona: "Si a los 5 días no ha conectado",
     pasos: [
-      { tipo: "mensaje", canal: "email", titulo: "Bienvenida", texto: "Bienvenido a Cifrato, {{nombre}}. Estos son los 3 pasos para empezar." },
+      { tipo: "mensaje", canal: "email", titulo: "Bienvenida", texto: "Bienvenido a Cifrato, {{nombre}}. Son 3 pasos y el primero toma 5 minutos: conectar la DIAN." },
       { tipo: "espera", dias: 2 },
       {
         tipo: "condicion",
         pregunta: "¿Conectó la DIAN?",
         ramas: [
-          { nombre: "Sí", principal: true, pasos: [{ tipo: "mensaje", canal: "whatsapp", titulo: "Ya estás conectado", texto: "Listo, {{nombre}}. Tus facturas empiezan a llegar hoy." }] },
-          { nombre: "No", pasos: [{ tipo: "tarea", titulo: "Sesión de soporte", texto: "Acompañar la conexión en 15 minutos." }] },
+          { nombre: "Sí", pasos: [{ tipo: "fin", titulo: "Pasa a Conectar el ERP" }] },
+          {
+            nombre: "No",
+            principal: true,
+            pasos: [
+              { tipo: "mensaje", canal: "whatsapp", titulo: "Guía de 5 minutos", texto: "Hola {{nombre}}, así conectas la DIAN en 5 minutos: {{guia}}" },
+              { tipo: "espera", dias: 3 },
+              { tipo: "tarea", titulo: "Conectar en llamada", texto: "15 minutos para conectar la DIAN en vivo." },
+            ],
+          },
         ],
       },
-      { tipo: "espera", dias: 5 },
-      { tipo: "mensaje", canal: "email", titulo: "Tus primeras facturas", texto: "Así va {{empresa}}: facturas causadas y tiempo ahorrado." },
-      { tipo: "espera", dias: 23 },
-      { tipo: "mensaje", canal: "email", titulo: "Tu opinión", texto: "¿Cómo va todo? Si conoces otra firma, te damos un mes gratis." },
-      { tipo: "fin", titulo: "Sale de la campaña" },
+    ],
+  },
+  {
+    id: "erp",
+    etapa: "Configuración",
+    nombre: "Conectar el ERP",
+    evento: "dian_conectada",
+    disparador: "Conectó la DIAN",
+    meta: "erp_conectado",
+    objetivo: "Conecta su ERP",
+    persona: "Si a los 7 días no ha conectado",
+    pasos: [
+      { tipo: "mensaje", canal: "email", titulo: "Siguiente paso: {{erp}}", texto: "Las 4 pantallas de {{erp}} que necesitas, con capturas." },
+      { tipo: "espera", dias: 2 },
+      {
+        tipo: "condicion",
+        pregunta: "¿Conectó el ERP?",
+        ramas: [
+          { nombre: "Sí", pasos: [{ tipo: "fin", titulo: "Pasa a Primeras facturas" }] },
+          {
+            nombre: "No",
+            principal: true,
+            pasos: [
+              { tipo: "mensaje", canal: "whatsapp", titulo: "¿Lo hacemos juntos?", texto: "{{nombre}}, ¿te ayudo a conectar {{erp}} hoy?" },
+              { tipo: "espera", dias: 5 },
+              { tipo: "tarea", titulo: "Conectar el ERP en llamada", texto: "Revisar permisos y conectar en vivo." },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "primeras",
+    etapa: "Configuración",
+    nombre: "Primeras facturas",
+    evento: "erp_conectado",
+    disparador: "Conectó el ERP",
+    meta: "primer_lote_subido",
+    objetivo: "Sube su primer lote al ERP",
+    persona: "Si hay errores al subir o a los 7 días no sube",
+    pasos: [
+      { tipo: "mensaje", canal: "email", titulo: "Tus facturas ya llegaron", texto: "Tienes {{pendientes}} facturas listas para revisar y subir a {{erp}}." },
+      { tipo: "espera", dias: 3 },
+      {
+        tipo: "condicion",
+        pregunta: "¿Subió el primer lote?",
+        ramas: [
+          {
+            nombre: "Sí",
+            pasos: [
+              { tipo: "mensaje", canal: "email", titulo: "Tu primera semana", texto: "{{facturas}} facturas causadas en {{empresa}} sin digitar." },
+              { tipo: "fin", titulo: "Sale del journey" },
+            ],
+          },
+          {
+            nombre: "No",
+            principal: true,
+            pasos: [
+              { tipo: "mensaje", canal: "whatsapp", titulo: "Tus facturas te esperan", texto: "{{nombre}}, tienes {{pendientes}} facturas listas. Súbelas en un clic: {{enlace}}" },
+              { tipo: "espera", dias: 4 },
+              { tipo: "tarea", titulo: "Revisión de 20 minutos", texto: "Resolver errores o dudas de la causación." },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "empresas",
+    etapa: "Uso",
+    nombre: "Sumar sus empresas",
+    evento: "empresas_sin_activar",
+    disparador: "Firma o contador con menos de la mitad de sus empresas activas a los 21 días",
+    meta: "empresa_agregada",
+    objetivo: "Activa otra empresa",
+    persona: "Si maneja más de 10 empresas",
+    pasos: [
+      { tipo: "mensaje", canal: "email", titulo: "Agrega tu siguiente empresa", texto: "Llevas {{activas}} de {{contratadas}} empresas. La siguiente toma 5 minutos." },
+      { tipo: "espera", dias: 3 },
+      { tipo: "mensaje", canal: "whatsapp", titulo: "Lo que ya automatizaste", texto: "Así va {{empresa_activa}}, {{nombre}}. ¿Hacemos lo mismo con la siguiente?" },
+      { tipo: "espera", dias: 4 },
+      {
+        tipo: "condicion",
+        pregunta: "¿Activó otra empresa?",
+        ramas: [
+          { nombre: "Sí", pasos: [{ tipo: "fin", titulo: "Sale del journey" }] },
+          { nombre: "No", principal: true, pasos: [{ tipo: "tarea", titulo: "Plan de carga", texto: "Definir con la firma el orden y las fechas para activar sus empresas." }] },
+        ],
+      },
+    ],
+  },
+  {
+    id: "caida",
+    etapa: "Uso",
+    nombre: "Uso en caída",
+    evento: "salud_ambar",
+    disparador: "Su salud pasó a ámbar",
+    meta: "salud_verde",
+    objetivo: "Vuelve a verde",
+    persona: "Si pasa a rojo, llamada en 24 horas",
+    pasos: [
+      { tipo: "mensaje", canal: "whatsapp", titulo: "¿Todo bien?", texto: "Hola {{nombre}}, vimos menos facturas esta semana en {{empresa}}. ¿Pasó algo con la DIAN o con {{erp}}?" },
+      { tipo: "espera", dias: 3 },
+      {
+        tipo: "condicion",
+        pregunta: "¿Volvió a subir facturas?",
+        ramas: [
+          { nombre: "Sí", pasos: [{ tipo: "fin", titulo: "Sale del journey" }] },
+          {
+            nombre: "No",
+            principal: true,
+            pasos: [
+              { tipo: "mensaje", canal: "email", titulo: "Revisa tu conexión", texto: "Tu conexión con {{erp}} necesita atención. Revísala aquí: {{enlace}}" },
+              { tipo: "espera", dias: 4 },
+              { tipo: "tarea", titulo: "Llamada del especialista", texto: "Llamar con el uso de las últimas 4 semanas." },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "renovacion",
+    etapa: "Renovación",
+    nombre: "Antes de renovar",
+    evento: "renovacion_45_dias",
+    disparador: "Faltan 45 días para la renovación",
+    meta: "renovo",
+    objetivo: "Renueva",
+    persona: "Si su salud es ámbar o roja",
+    pasos: [
+      {
+        tipo: "condicion",
+        pregunta: "¿Su salud es verde?",
+        ramas: [
+          {
+            nombre: "Sí",
+            principal: true,
+            pasos: [
+              { tipo: "mensaje", canal: "email", titulo: "Tu año con Cifrato", texto: "{{facturas_total}} facturas causadas en {{empresa}} sin digitar." },
+              { tipo: "espera", dias: 15 },
+              { tipo: "mensaje", canal: "whatsapp", titulo: "Tu renovación", texto: "Tu plan se renueva el {{fecha}}. ¿Revisamos si necesitas más empresas?" },
+            ],
+          },
+          { nombre: "No", pasos: [{ tipo: "tarea", titulo: "Revisión de cuenta", texto: "30 minutos para revisar uso y plan antes de renovar." }] },
+        ],
+      },
     ],
   },
 ];
 
-// ── En qué campaña está cada interesado ───────────────────────────────
+// ── Salud de la cuenta y reglas generales ─────────────────────────────
 
-const POR_MOTIVO: Record<string, string> = {
-  "Pidió propuesta": "propuesta",
-  "Lo consulta internamente": "decision",
-  "Sin respuesta": "activacion",
-  Precio: "precio",
-  "No asistió": "no_asistio",
-  "No es el momento": "momento",
+export type Salud = "verde" | "ambar" | "rojo";
+
+export const SALUD: Record<Salud, { nombre: string; regla: string; color: string }> = {
+  verde: { nombre: "Verde", regla: "Cumple todo", color: "var(--c-demo)" },
+  ambar: { nombre: "Ámbar", regla: "Falla 1", color: "var(--c-humano)" },
+  rojo: { nombre: "Rojo", regla: "Fallan 2 o más", color: "var(--c-perdido)" },
 };
 
-export function campanaDe(l: Lead, ahora: number): Campana | null {
-  const r = l.detalle_puntaje.resultado;
-  if (r?.estado === "cerro") return porId("bienvenida");
-  if (r) return porId(POR_MOTIVO[r.motivo] ?? "decision");
-  if (l.detalle_puntaje.dudas?.length) return porId("aclaracion");
-  if (l.agendado_para && new Date(l.agendado_para).getTime() > ahora) return porId("antes");
-  return null;
+export const SENALES_SALUD = [
+  "Sube tantas facturas como su promedio del último mes",
+  "Usa todas las empresas que contrató",
+  "Entró en la última semana",
+  "Sus lotes suben al ERP sin errores",
+];
+
+export const REGLAS_PERSONA: { salud: Salud; texto: string }[] = [
+  { salud: "verde", texto: "Solo automático" },
+  { salud: "ambar", texto: "Automático primero; si en 7 días no mejora, el especialista" },
+  { salud: "rojo", texto: "El especialista llama en 24 horas" },
+];
+
+export const REGLAS_FRECUENCIA = [
+  "Máximo 2 mensajes por semana por cuenta",
+  "Un journey a la vez: Renovación, luego Uso en caída, luego el resto",
+  "Sin mensajes automáticos 3 días después de hablar con el especialista",
+  "Grupo de control: 15 % de las cuentas nuevas no recibe journeys",
+];
+
+// ── Quiénes están en cada journey ─────────────────────────────────────
+
+// Cuentas de muestra (ficticias). Los interesados que cerraron en el panel entran a Bienvenida.
+export type Cuenta = { id: string; empresa: string; contacto: string; tipo: string; salud: Salud; dia: number; leadId?: string };
+
+const CUENTAS: (Cuenta & { campana: string })[] = [
+  { id: "c1", empresa: "Ruiz & Asociados", contacto: "Paula Ruiz", tipo: "Firma contable", salud: "verde", campana: "bienvenida", dia: 1 },
+  { id: "c2", empresa: "Contaplus SAS", contacto: "Jorge Lince", tipo: "Firma contable", salud: "ambar", campana: "bienvenida", dia: 4 },
+  { id: "c3", empresa: "Asesorías Peña", contacto: "Diana Peña", tipo: "Contador independiente", salud: "verde", campana: "erp", dia: 1 },
+  { id: "c4", empresa: "Grupo Contable del Norte", contacto: "Mauricio Arce", tipo: "Firma contable", salud: "ambar", campana: "erp", dia: 5 },
+  { id: "c5", empresa: "Restaurante La Brasa", contacto: "Camila Ortiz", tipo: "Restaurante", salud: "verde", campana: "primeras", dia: 2 },
+  { id: "c6", empresa: "Nova Contadores", contacto: "Andrea Salas", tipo: "Firma contable", salud: "ambar", campana: "primeras", dia: 6 },
+  { id: "c7", empresa: "Bermúdez Contadores", contacto: "Luis Bermúdez", tipo: "Firma contable", salud: "ambar", campana: "empresas", dia: 3 },
+  { id: "c8", empresa: "Outsourcing Contable Ríos", contacto: "Sandra Ríos", tipo: "Firma contable", salud: "ambar", campana: "empresas", dia: 8 },
+  { id: "c9", empresa: "Ferretería El Tornillo", contacto: "Hernán Gil", tipo: "Empresa individual", salud: "ambar", campana: "caida", dia: 1 },
+  { id: "c10", empresa: "Cuentas Claras SAS", contacto: "Natalia Mejía", tipo: "Firma contable", salud: "ambar", campana: "caida", dia: 5 },
+  { id: "c11", empresa: "Méndez Auditores", contacto: "Ricardo Méndez", tipo: "Firma contable", salud: "verde", campana: "renovacion", dia: 3 },
+  { id: "c12", empresa: "Asesores Tributarios Lara", contacto: "Felipe Lara", tipo: "Firma contable", salud: "rojo", campana: "renovacion", dia: 1 },
+];
+
+const DIA = 86_400_000;
+const porId = (id: string) => CAMPANAS.find((c) => c.id === id)!;
+const diasDesde = (l: Lead, ahora: number) => Math.max(Math.floor((ahora - new Date(l.detalle_puntaje.resultado?.fecha ?? l.creado).getTime()) / DIA), 0);
+
+export function campanaDe(l: Lead): Campana | null {
+  return l.detalle_puntaje.resultado?.estado === "cerro" ? porId("bienvenida") : null;
 }
 
-const porId = (id: string) => CAMPANAS.find((c) => c.id === id)!;
+export function cuentasDe(c: Campana, leads: Lead[], ahora: number): Cuenta[] {
+  const cerraron = leads
+    .filter((l) => campanaDe(l)?.id === c.id)
+    .map((l) => ({ id: l.id, empresa: l.nombre_empresa, contacto: l.nombre, tipo: l.tipo_empresa, salud: "verde" as Salud, dia: diasDesde(l, ahora), leadId: l.id }));
+  return [...cerraron, ...CUENTAS.filter((x) => x.campana === c.id)];
+}
 
 type Accion = Extract<PasoCampana, { tipo: "mensaje" | "tarea" }>;
 
@@ -297,27 +288,9 @@ function linea(pasos: PasoCampana[], dia = 0): { paso: Accion; dia: number }[] {
   return out;
 }
 
-export function avance(l: Lead, c: Campana, ahora: number) {
+// Dónde va una cuenta que lleva `dias` días en el journey.
+export function avance(c: Campana, dias: number) {
   const pasos = linea(c.pasos);
-
-  // Antes de la reunión: los mensajes se cuentan hacia atrás desde la reunión, no desde que llegó.
-  if (c.id === "antes" && l.agendado_para) {
-    const reunion = new Date(l.agendado_para).getTime();
-    const momentos = [new Date(l.creado).getTime(), reunion - 86_400_000, reunion - 3_600_000];
-    const previos = pasos.slice(0, 3).map((p, i) => ({ ...p, t: momentos[i] }));
-    const hechos = previos.filter((p) => p.t <= ahora);
-    const siguiente = previos.find((p) => p.t > ahora) ?? null;
-    return {
-      ultimo: hechos.at(-1)?.paso ?? null,
-      siguiente: siguiente?.paso ?? null,
-      enDias: siguiente ? Math.max(Math.round((siguiente.t - ahora) / 86_400_000), 0) : null,
-      hechos: hechos.length,
-      total: previos.length,
-    };
-  }
-
-  const inicio = new Date(l.detalle_puntaje.resultado?.fecha ?? l.creado).getTime();
-  const dias = Math.floor((ahora - inicio) / 86_400_000);
   const hechos = pasos.filter((p) => p.dia <= dias);
   const siguiente = pasos.find((p) => p.dia > dias) ?? null;
   return {
@@ -329,10 +302,9 @@ export function avance(l: Lead, c: Campana, ahora: number) {
   };
 }
 
+export const avanceLead = (l: Lead, c: Campana, ahora: number) => avance(c, diasDesde(l, ahora));
+
 // Día de cada mensaje o tarea en el camino principal, para mostrarlo en el lienzo.
 export function diasDe(c: Campana) {
   return new Map(linea(c.pasos).map((p) => [p.paso as PasoCampana, p.dia]));
 }
-
-// Propiedades que el sistema escribe en el contacto de HubSpot; los workflows de HubSpot se activan con ellas.
-export const PROPIEDADES = ["cifrato_reunion", "cifrato_puntaje", "cifrato_caso_especial", "cifrato_resultado", "cifrato_motivo", "cifrato_analisis"];

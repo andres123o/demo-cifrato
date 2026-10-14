@@ -1,12 +1,13 @@
 "use client";
 
-// Panel de operaciones de ingreso. Tres vistas: Resumen (cómo se asignó cada interesado y qué viene),
-// Excepciones (lo que no era simple y cómo lo resolvió el sistema) y Decisiones (el registro completo).
+// Panel de operaciones de ingreso. Cuatro vistas: Resumen (cómo se asignó cada interesado y qué viene),
+// Excepciones (lo que no era simple y cómo lo resolvió el sistema), Decisiones (el registro completo)
+// y Seguimiento (los journeys de retención).
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronRight, X } from "lucide-react";
 import { Campanas } from "./Campanas";
 import { Enrutador } from "./Enrutador";
-import { avance, campanaDe } from "@/lib/campanas";
+import { avanceLead, campanaDe } from "@/lib/campanas";
 import { Decisiones, Excepciones, type FiltroExcepciones } from "./Listas";
 import { ChipDestino, Estado, Nota, Recorrido, Revisar, Senales, Titulo, tonoDe } from "./piezas";
 import {
@@ -34,7 +35,7 @@ export function Panel({ leads, ahora }: { leads: Lead[]; ahora: number }) {
   const [vista, setVista] = useState<Vista>("resumen");
   const [abiertoId, setAbiertoId] = useState<string | null>(null);
   const [nodo, setNodo] = useState<Nodo | null>(null);
-  const [campana, setCampana] = useState("propuesta");
+  const [campana, setCampana] = useState("bienvenida");
   const [filtroExc, setFiltroExc] = useState<FiltroExcepciones>("abierta");
   const abierto = leads.find((l) => l.id === abiertoId) ?? null;
   const abiertas = leads.filter(necesitaRevision).length;
@@ -312,8 +313,8 @@ function agrupar<T>(lista: T[], clave: (x: T) => string): [string, T[]][] {
 
 function Ficha({ lead: l, ahora, onCerrar, onVerCampana }: { lead: Lead; ahora: number; onCerrar: () => void; onVerCampana: (id: string) => void }) {
   const resultado = l.detalle_puntaje.resultado;
-  const campana = campanaDe(l, ahora);
-  const paso = campana ? avance(l, campana, ahora) : null;
+  const campana = campanaDe(l);
+  const paso = campana ? avanceLead(l, campana, ahora) : null;
   const cerrar = useRef<HTMLButtonElement>(null);
   const estado = estadoExcepcion(l);
   const reg = l.detalle_puntaje.registro;
@@ -421,7 +422,7 @@ function Ficha({ lead: l, ahora, onCerrar, onVerCampana }: { lead: Lead; ahora: 
               </div>
               <p className="mt-2.5 text-[13.5px] text-tenue">
                 {paso.siguiente
-                  ? `Siguiente: ${paso.siguiente.tipo === "mensaje" ? (paso.siguiente.canal === "email" ? "correo" : "WhatsApp") : "tarea del asesor"}, ${paso.siguiente.titulo.toLowerCase()}${paso.enDias ? `, en ${paso.enDias} ${paso.enDias === 1 ? "día" : "días"}` : ""}`
+                  ? `Siguiente: ${paso.siguiente.tipo === "mensaje" ? (paso.siguiente.canal === "email" ? "correo" : "WhatsApp") : "tarea del especialista"}, ${paso.siguiente.titulo.toLowerCase()}${paso.enDias ? `, en ${paso.enDias} ${paso.enDias === 1 ? "día" : "días"}` : ""}`
                   : "Completó la secuencia"}
               </p>
             </section>

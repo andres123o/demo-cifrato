@@ -2,6 +2,7 @@
 // El panel muestra el sistema funcionando (por dónde pasó cada interesado y por qué), no comparaciones.
 import type { Camino } from "./puntaje.ts";
 import type { Registro } from "./registro.ts";
+import type { Volumen } from "./volumen.ts";
 
 // Lo que anotó el asesor después de la reunión.
 export type Resultado = { estado: "cerro" | "seguimiento" | "no_cerro"; motivo: string; nota: string; fecha: string };
@@ -35,6 +36,8 @@ export type Lead = {
     senales: { senal: string; valor: string; puntos: number }[];
     excepciones: string[];
     registro: Registro | null;
+    volumen?: Volumen; // volumen estimado y si lo declarado cuadra
+    empresas?: string; // cuántas empresas maneja (firmas y contadores)
     dudas?: { id: string; pregunta: string }[];
     aclaracion?: { pregunta: string; respuesta: string; nota: string; confianza?: "alta" | "baja" }[];
     cuenta_grande?: boolean;
@@ -141,7 +144,9 @@ function senalesFuertes(l: Lead) {
   const s = (n: string) => d.senales.find((x) => x.senal === n);
   if ((s("Registro")?.puntos ?? 0) >= 2) partes.push(l.tipo_empresa === "Firma contable" ? "Firma contable registrada" : "Registro verificado");
   else if (l.tipo_empresa === "Firma contable") partes.push("Firma contable");
-  if ((s("Facturas al mes")?.puntos ?? 0) >= 2) partes.push(`${l.rango_facturas.toLowerCase()} facturas`);
+  const est = d.volumen?.estimado;
+  if ((s("Volumen estimado")?.puntos ?? 0) >= 2 && est) partes.push(`~${est} facturas estimadas`);
+  else if ((s("Facturas al mes")?.puntos ?? 0) >= 2) partes.push(`${l.rango_facturas.toLowerCase()} facturas`);
   if ((s("Correo")?.puntos ?? 0) > 0) partes.push("correo de empresa");
   else partes.push("correo gratuito");
   if ((s("Origen")?.puntos ?? 0) >= 2) partes.push(`llegó por ${l.fuente}`);
@@ -186,6 +191,14 @@ export function traza(l: Lead): Paso[] {
     detalle: d.registro ? `${d.registro.actividad.split(" · ")[1]}, ${d.registro.empleados} empleados, ${d.registro.ciudad}` : "Se confirma el NIT en la reunión",
     cuando: en(1),
   });
+  if (d.volumen?.estimado != null)
+    pasos.push({
+      icono: "registro",
+      tono: d.volumen.cuadra ? "ok" : "alerta",
+      titulo: `Estimó ~${d.volumen.estimado} facturas al mes`,
+      detalle: `${d.volumen.fuente}. ${d.volumen.cuadra ? "Lo declarado cuadra" : "Lo declarado no cuadra: se descarta"}`,
+      cuando: en(1),
+    });
   const inicial = d.camino_inicial && d.camino_inicial !== "filtrado" ? d.camino_inicial : l.camino;
   pasos.push({ icono: "senales", titulo: `Sumó ${puntajeSin(l)} puntos`, detalle: senalesFuertes(l), cuando: en(1) });
   if (d.cuenta_grande) pasos.push({ icono: "alerta", titulo: "Detectó una cuenta grande", detalle: "Asignada al equipo senior, con la investigación lista", cuando: en(1) });

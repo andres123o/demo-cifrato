@@ -33,8 +33,14 @@ const EMPRESAS: Record<string, Registro> = {
 const normalizar = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 
-export function buscarEmpresa(nombre: string): Registro | null {
-  return EMPRESAS[normalizar(nombre)] ?? null;
+// El NIT sin puntos ni dígito de verificación.
+const base = (nit: string) => nit.split("-")[0].replace(/\D/g, "");
+
+// Primero por NIT (si escribió el dígito de verificación pegado, también cuadra); si no, por nombre.
+export function buscarEmpresa(nombre: string, nit = ""): Registro | null {
+  const n = nit.replace(/\D/g, "");
+  const porNit = n ? Object.values(EMPRESAS).find((e) => n.startsWith(base(e.nit))) : undefined;
+  return porNit ?? EMPRESAS[normalizar(nombre)] ?? null;
 }
 
 export const esContable = (r: Registro | null) => !!r && r.actividad.startsWith("6920");

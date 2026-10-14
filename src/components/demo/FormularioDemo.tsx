@@ -18,22 +18,28 @@ import {
   Pregunta,
 } from "./ui";
 import {
+  OPCIONES_EMPRESAS,
   OPCIONES_ERP,
   OPCIONES_FACTURAS,
   OPCIONES_FUENTE,
   OPCIONES_TIPO_EMPRESA,
   REGEX_CELULAR,
   REGEX_CORREO,
+  REGEX_NIT,
   decidirDestino,
+  manejaEmpresas,
   type DatosContacto,
   type DatosEmpresa,
   type Destino,
+  type RangoEmpresas,
   type RangoFacturas,
   type TipoEmpresa,
 } from "@/lib/demo/formulario";
 
-const PREGUNTAS = ["datos", "fuente", "tipo", "empresa", "erp", "facturas"] as const;
+// "empresas" es nueva y solo aparece para firmas contables y contadores.
+const PREGUNTAS = ["datos", "fuente", "tipo", "empresa", "erp", "empresas", "facturas"] as const;
 type PasoPregunta = (typeof PREGUNTAS)[number];
+const preguntasPara = (tipo: string) => PREGUNTAS.filter((p) => p !== "empresas" || manejaEmpresas(tipo));
 // Tras la última pregunta, el sistema precalifica solo (pantalla "analizando") y muestra la agenda que corresponde.
 // Si los datos se contradicen, después de agendar viene una aclaración corta ("aclarar") y el sistema reasigna.
 type Paso = PasoPregunta | "analizando" | "agenda" | "aclarar" | "ajustando" | "aviso" | "final";
@@ -43,8 +49,17 @@ const OTRO = "Otro";
 const LETRAS = "ABCDEFGH";
 const AVANCE_MS = 260; // pausa para ver la opción marcada antes de avanzar
 
+// La reunión la decide el camino del sistema; si el sistema no intervino ("filtrado"), la regla de Cifrato.
 function configAgenda(destino: Destino, empresa: string, camino: Camino | null): ConfigAgenda | null {
-  if (destino.tipo === "descubrimiento" && camino === "demo_directa") {
+  const tipo =
+    camino && camino !== "filtrado"
+      ? camino
+      : destino.tipo === "descubrimiento"
+        ? "descubrimiento"
+        : destino.tipo === "demo_grupal"
+          ? "sesion_grupal"
+          : null;
+  if (tipo === "demo_directa") {
     return {
       titulo: `Demo Cifrato <> ${empresa}`,
       duracionMin: 45,
@@ -54,10 +69,8 @@ function configAgenda(destino: Destino, empresa: string, camino: Camino | null):
       horas: ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00"],
     };
   }
-  if (destino.tipo === "demo_grupal" || (destino.tipo === "descubrimiento" && camino === "sesion_grupal")) {
-    return CONFIG_GRUPAL;
-  }
-  if (destino.tipo === "descubrimiento") {
+  if (tipo === "sesion_grupal") return CONFIG_GRUPAL;
+  if (tipo === "descubrimiento" || tipo === "persona") {
     return {
       titulo: `Descubrimiento Cifrato <> ${empresa}`,
       duracionMin: 30,
@@ -103,7 +116,12 @@ function validar(paso: Paso, c: DatosContacto, fuenteOtro: string, e: DatosEmpre
     case "tipo":
       return { tipo: !e.tipoEmpresa ? "Elige una opción." : undefined };
     case "empresa":
-      return { empresa: !e.nombreEmpresa.trim() ? "Escribe el nombre de tu empresa o el tuyo como contador." : undefined };
+      return {
+        empresa: !e.nombreEmpresa.trim() ? "Escribe el nombre de tu empresa o el tuyo como contador." : undefined,
+        nit: e.nit && !REGEX_NIT.test(e.nit) ? "Revisa el NIT: solo números, sin dígito de verificación." : undefined,
+      };
+    case "empresas":
+      return { empresas: !e.empresas ? "Elige un rango." : undefined };
     case "erp":
       return { erp: e.erps.length === 0 ? "Elige al menos un software." : undefined };
     case "facturas":
@@ -117,7 +135,7 @@ export function FormularioDemo() {
   const [paso, setPaso] = useState<Paso>("datos");
   const [contacto, setContacto] = useState<DatosContacto>({ nombre: "", celular: "", correo: "", fuente: "" });
   const [fuenteOtro, setFuenteOtro] = useState("");
-  const [empresa, setEmpresa] = useState<DatosEmpresa>({ tipoEmpresa: "", nombreEmpresa: "", erps: [], facturas: "" });
+  const [empresa, setEmpresa] = useState<DatosEmpresa>({ tipoEmpresa: "", nombreEmpresa: "", nit: "", erps: [], empresas: "", facturas: "" });
   const [intento, setIntento] = useState(false);
   const [destino, setDestino] = useState<Destino | null>(null);
   const [horario, setHorario] = useState<string | undefined>();
@@ -159,8 +177,8 @@ export function FormularioDemo() {
       });
       return;
     }
-    const i = PREGUNTAS.indexOf(desde as PasoPregunta);
-    irA(PREGUNTAS[i + 1]);
+    const lista = preguntasPara(empresaActual.tipoEmpresa);
+    irA(lista[lista.indexOf(desde as PasoPregunta) + 1]);
   }
 
   // La "IA" (simulada con reglas) interpreta las respuestas en el servidor y reasigna la reunión.
@@ -204,10 +222,18 @@ export function FormularioDemo() {
   function elegirTipo(t: TipoEmpresa) {
     elegirYAvanzar(() => {
       // La pregunta de facturas cambia con el tipo, así que se reinicia.
-      const nueva = { ...empresa, tipoEmpresa: t, facturas: "" as const };
+      const nueva = { ...empresa, tipoEmpresa: t, empresas: "" as const, facturas: "" as const };
       setEmpresa(nueva);
       return nueva;
     }, "tipo");
+  }
+
+  function elegirEmpresas(n: RangoEmpresas) {
+    elegirYAvanzar(() => {
+      const nueva = { ...empresa, empresas: n };
+      setEmpresa(nueva);
+      return nueva;
+    }, "empresas");
   }
 
   function elegirFacturas(f: RangoFacturas) {
@@ -230,7 +256,15 @@ export function FormularioDemo() {
   // Atajos de teclado: A, B, C… para las preguntas de opciones.
   useEffect(() => {
     const opciones =
-      paso === "tipo" ? OPCIONES_TIPO_EMPRESA : paso === "facturas" ? OPCIONES_FACTURAS : paso === "aclarar" && dudaActual ? dudaActual.opciones : null;
+      paso === "tipo"
+        ? OPCIONES_TIPO_EMPRESA
+        : paso === "empresas"
+          ? OPCIONES_EMPRESAS
+          : paso === "facturas"
+            ? OPCIONES_FACTURAS
+            : paso === "aclarar" && dudaActual
+              ? dudaActual.opciones
+              : null;
     if (!opciones) return;
     function tecla(e: KeyboardEvent) {
       if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement).tagName === "INPUT") return;
@@ -238,6 +272,7 @@ export function FormularioDemo() {
       if (i < 0 || i >= opciones!.length) return;
       if (paso === "aclarar") responderDuda(opciones![i]);
       else if (paso === "tipo") elegirTipo(opciones![i] as TipoEmpresa);
+      else if (paso === "empresas") elegirEmpresas(opciones![i] as RangoEmpresas);
       else elegirFacturas(opciones![i] as RangoFacturas);
     }
     window.addEventListener("keydown", tecla);
@@ -250,6 +285,7 @@ export function FormularioDemo() {
     { paso: "tipo", etiqueta: "Tipo", valor: empresa.tipoEmpresa },
     { paso: "empresa", etiqueta: "Empresa", valor: indice > 3 || indice < 0 ? empresa.nombreEmpresa : undefined },
     { paso: "erp", etiqueta: "Software", valor: indice > 4 || indice < 0 ? empresa.erps.join(", ") : undefined },
+    ...(manejaEmpresas(empresa.tipoEmpresa) ? [{ paso: "empresas" as const, etiqueta: "Empresas", valor: empresa.empresas }] : []),
     { paso: "facturas", etiqueta: "Facturas", valor: empresa.facturas },
     { paso: "agenda", etiqueta: "Agenda", valor: agendado ? horario : undefined },
   ];
@@ -378,6 +414,18 @@ export function FormularioDemo() {
             valido={empresa.nombreEmpresa.trim().length > 1}
             onChange={(e) => setEmpresa({ ...empresa, nombreEmpresa: e.target.value })}
           />
+          <div className="mt-4">
+            <CampoFlotante
+              id="nit"
+              etiqueta="NIT (opcional)"
+              inputMode="numeric"
+              error={errores.nit}
+              value={empresa.nit}
+              valido={REGEX_NIT.test(empresa.nit)}
+              onChange={(e) => setEmpresa({ ...empresa, nit: e.target.value.replace(/D/g, "").slice(0, 10) })}
+            />
+            {errores.nit && <p className="mt-2 text-[13px] text-error">{errores.nit}</p>}
+          </div>
         </Pregunta>
         <Acciones atras={() => irA("tipo")}>
           <BotonPrimario>Siguiente</BotonPrimario>
@@ -419,6 +467,19 @@ export function FormularioDemo() {
         </Acciones>
       </form>
     );
+  } else if (paso === "empresas") {
+    contenido = (
+      <div>
+        <Pregunta id="empresas" titulo="¿Cuántas empresas manejas?" error={errores.empresas}>
+          <div role="radiogroup" aria-labelledby="empresas-titulo" className="grid gap-2.5 sm:grid-cols-2">
+            {OPCIONES_EMPRESAS.map((o, i) => (
+              <OpcionTecla key={o} tecla={LETRAS[i]} texto={o} elegida={empresa.empresas === o} onElegir={() => elegirEmpresas(o)} />
+            ))}
+          </div>
+        </Pregunta>
+        <Acciones atras={() => irA("erp")} />
+      </div>
+    );
   } else if (paso === "facturas") {
     contenido = (
       <div>
@@ -442,7 +503,7 @@ export function FormularioDemo() {
             ))}
           </div>
         </Pregunta>
-        <Acciones atras={() => irA("erp")} />
+        <Acciones atras={() => irA(manejaEmpresas(empresa.tipoEmpresa) ? "empresas" : "erp")} />
       </div>
     );
   } else if (paso === "agenda" && agenda) {

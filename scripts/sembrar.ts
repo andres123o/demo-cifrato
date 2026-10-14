@@ -84,14 +84,30 @@ function diasDesdeHoy(dias: number, hora: number) {
   return d.toISOString();
 }
 
+// Cuántas empresas maneja cada firma o contador (lo que responden en la pregunta nueva).
+const EMPRESAS: Record<string, string> = {
+  "Gómez & Asociados Contadores": "6 a 20",
+  "Auditar Consultores SAS": "21 a 50",
+  "Prieto Outsourcing Contable": "21 a 50",
+  "Torres Contadores": "1 a 5",
+  "Castaño Asesorías": "6 a 20",
+  "Vargas Contable": "1 a 5",
+  "Ortiz y Cía": "6 a 20",
+  "Grupo Empresarial Andino": "Más de 50",
+  "Jiménez Contadores Públicos": "21 a 50",
+  "Soluciones Integrales Pardo": "6 a 20",
+  "Contabilidad JR": "6 a 20",
+};
+
 const url = process.env.SUPABASE_URL;
 const clave = process.env.SUPABASE_SECRET_KEY;
 if (!url || !clave) throw new Error("Faltan SUPABASE_URL o SUPABASE_SECRET_KEY (corre con --env-file=.env.local)");
 const db = createClient(url, clave, { auth: { persistSession: false } });
 
 const filas = FICTICIOS.map((f) => {
-  const destinoCifrato = decidirDestino({ tipoEmpresa: f.tipoEmpresa, nombreEmpresa: f.empresa, erps: f.erps, facturas: f.facturas }).tipo;
-  const entrada = { nombreEmpresa: f.empresa, tipoEmpresa: f.tipoEmpresa, facturas: f.facturas, erps: f.erps, correo: f.correo, fuente: f.fuente, destinoCifrato };
+  const empresas = EMPRESAS[f.empresa] ?? "";
+  const destinoCifrato = decidirDestino({ tipoEmpresa: f.tipoEmpresa, nombreEmpresa: f.empresa, nit: "", erps: f.erps, empresas: "", facturas: f.facturas }).tipo;
+  const entrada = { nombreEmpresa: f.empresa, empresas, tipoEmpresa: f.tipoEmpresa, facturas: f.facturas, erps: f.erps, correo: f.correo, fuente: f.fuente, destinoCifrato };
   const inicial: Resultado = calificar(entrada);
   const r = calificar({ ...entrada, respuestas: f.respuestas });
   const camino = f.corregidoA ?? r.camino;
@@ -110,6 +126,8 @@ const filas = FICTICIOS.map((f) => {
     estado: "agendado",
     puntaje: r.camino === "filtrado" ? null : r.puntaje,
     detalle_puntaje: {
+      ...(empresas ? { empresas } : {}),
+      volumen: r.volumen,
       senales: r.detalle,
       excepciones: r.excepciones,
       registro: r.registro,

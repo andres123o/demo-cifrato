@@ -3,6 +3,7 @@
 // Tres capas: 1) reglas con varias señales; 2) si los datos se contradicen, una aclaración corta
 // después de agendar (la "IA", simulada con reglas); 3) lo que no queda claro pasa a auditoría humana.
 import { buscarEmpresa, esContable, type Registro } from "./registro.ts";
+import { estimarVolumen, volumenParaCalificar, type Volumen } from "./volumen.ts";
 
 // demo_directa: agenda la demo de una vez · descubrimiento: agenda el Descubrimiento y el equipo llega
 // con el análisis previo · sesion_grupal: agenda la demo grupal · persona: auditoría humana, un asesor
@@ -11,6 +12,8 @@ export type Camino = "demo_directa" | "descubrimiento" | "sesion_grupal" | "pers
 
 export type Entrada = {
   nombreEmpresa: string;
+  nit?: string; // con él se consulta el registro
+  empresas?: string; // cuántas empresas maneja (firmas y contadores)
   tipoEmpresa: string;
   facturas: string;
   erps: string[];
@@ -33,6 +36,7 @@ export type Resultado = {
   cuentaGrande: boolean;
   minutosAhorrados: number;
   registro: Registro | null;
+  volumen: Volumen;
   analisis: string; // lo que lee el equipo antes de la reunión
 };
 
@@ -64,18 +68,7 @@ function detectarDudas(e: Entrada, registro: Registro | null, corporativo: boole
       ],
     });
   }
-  if (e.tipoEmpresa === "Empresa individual" && e.facturas === "Más de 800" && registro && registro.empleados < 5) {
-    dudas.push({
-      id: "volumen",
-      motivo: "Más de 800 facturas con muy pocos empleados",
-      pregunta: "¿Esas facturas son de tu empresa o de las empresas a las que les llevas la contabilidad?",
-      opciones: [
-        { texto: "De las empresas que atiendo", ajuste: 0, confianza: "alta", nota: "El volumen corresponde a sus clientes" },
-        { texto: "Solo de mi empresa", ajuste: -2, confianza: "baja", nota: "Volumen atípico para su tamaño, requiere revisión" },
-        { texto: "Sumé compras y ventas", ajuste: -1, confianza: "alta", nota: "Su volumen de compras es menor al reportado" },
-      ],
-    });
-  }
+  // La duda de "más de 800 facturas con pocos empleados" ya no se pregunta: el volumen se estima solo.
   if (e.tipoEmpresa === "Firma contable" && registro && !esContable(registro)) {
     dudas.push({
       id: "actividad",
@@ -103,12 +96,24 @@ function detectarDudas(e: Entrada, registro: Registro | null, corporativo: boole
 }
 
 export function calificar(e: Entrada): Resultado {
-  const registro = buscarEmpresa(e.nombreEmpresa);
+  const registro = buscarEmpresa(e.nombreEmpresa, e.nit);
+  // lo declarado no es confiable. Se estima el volumen y lo declarado solo lo verifica.
+  const volumen = estimarVolumen(e.tipoEmpresa, registro, e.empresas ?? "", e.facturas);
+  const facturas = volumenParaCalificar(volumen, e.facturas);
   const dominio = e.correo.split("@")[1]?.toLowerCase() ?? "";
   const corporativo = !!dominio && !CORREOS_GRATUITOS.includes(dominio);
 
   const detalle = [
-    { senal: "Facturas al mes", valor: e.facturas, puntos: ({ "Más de 800": 3, "Entre 500 y 800": 2, "Entre 300 y 500": 1 } as Record<string, number>)[e.facturas] ?? 0 },
+    {
+      senal: "Volumen estimado",
+      valor: volumen.estimado !== null ? `~${volumen.estimado} facturas al mes` : `${e.facturas} (declarado, sin verificar)`,
+      puntos: facturas >= 800 ? 3 : facturas >= 500 ? 2 : facturas >= 300 ? 1 : 0,
+    },
+    {
+      senal: "Facturas declaradas",
+      valor: `${e.facturas}${volumen.cuadra === true ? ", cuadra con lo estimado" : volumen.cuadra === false ? ", no cuadra: se descarta" : ""}`,
+      puntos: volumen.cuadra ? 1 : 0,
+    },
     { senal: "Tipo de empresa", valor: e.tipoEmpresa, puntos: e.tipoEmpresa === "Firma contable" ? 2 : 1 },
     { senal: "Correo", valor: corporativo ? `Corporativo (${dominio})` : "Gratuito", puntos: corporativo ? 2 : 0 },
     {
@@ -142,16 +147,23 @@ export function calificar(e: Entrada): Resultado {
   const excepciones = [...(cuentaGrande ? ["Cuenta grande (más de 200 empleados)"] : []), ...dudas.map((d) => d.motivo)];
 
   let camino: Camino;
-  if (e.destinoCifrato !== "descubrimiento") camino = "filtrado";
+  // Lo que Cifrato manda a la demo grupal por el número declarado se rescata si la estimación dice
+  // otra cosa. El ERP no soportado sigue fuera.
+  const rescatable = e.destinoCifrato === "demo_grupal" && (volumen.estimado ?? 0) >= 300;
+  if (e.destinoCifrato !== "descubrimiento" && !rescatable) camino = "filtrado";
   else if (confianzaBaja) camino = "persona"; // capa 3: lo que la aclaración no resolvió
   else if (cuentaGrande) camino = "demo_directa";
+  else if (volumen.estimado !== null && volumen.estimado < 300) camino = "sesion_grupal"; // la misma regla de volumen de Cifrato, con el dato estimado
   else camino = puntaje >= 9 ? "demo_directa" : puntaje >= 5 ? "descubrimiento" : "sesion_grupal";
 
   const analisis = [
     registro
       ? `${e.nombreEmpresa}: ${registro.actividad.split(" · ")[1].toLowerCase()} en ${registro.ciudad}, ${registro.empleados} empleados, matriculada desde ${registro.desde} (NIT ${registro.nit}).`
       : `${e.nombreEmpresa}: no aparece en el registro, confirmar NIT en la llamada.`,
-    `${e.facturas} facturas al mes en ${e.erps.join(", ")}. Llegó por ${e.fuente}${corporativo ? "" : ", con correo gratuito"}.`,
+    volumen.estimado !== null
+      ? `Volumen estimado: ~${volumen.estimado} facturas de compra al mes (${volumen.fuente}). Declaró ${e.facturas.toLowerCase()}${volumen.cuadra ? ", cuadra" : ", no cuadra"}.`
+      : `Declaró ${e.facturas.toLowerCase()} facturas al mes, sin datos para verificarlo.`,
+    `Usa ${e.erps.join(", ")}. Llegó por ${e.fuente}${corporativo ? "" : ", con correo gratuito"}.`,
     cuentaGrande
       ? `Cuenta grande: asignar al equipo senior. Llevar caso de integración con ${e.erps.length > 1 ? "varios ERP" : e.erps[0]}, propuesta por volumen y plan de implementación por etapas.`
       : "",
@@ -171,6 +183,7 @@ export function calificar(e: Entrada): Resultado {
     cuentaGrande,
     minutosAhorrados: MINUTOS[camino],
     registro,
+    volumen,
     analisis,
   };
 }
