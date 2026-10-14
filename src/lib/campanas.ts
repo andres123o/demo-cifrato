@@ -130,7 +130,7 @@ export const CAMPANAS: Campana[] = [
     disparador: "Firma o contador con menos de la mitad de sus empresas activas a los 21 días",
     meta: "empresa_agregada",
     objetivo: "Activa otra empresa",
-    persona: "Si maneja más de 10 empresas",
+    persona: "A los 7 días, o de una vez si maneja más de 10 empresas",
     pasos: [
       { tipo: "mensaje", canal: "email", titulo: "Agrega tu siguiente empresa", texto: "Llevas {{activas}} de {{contratadas}} empresas. La siguiente toma 5 minutos." },
       { tipo: "espera", dias: 3 },
@@ -154,7 +154,7 @@ export const CAMPANAS: Campana[] = [
     disparador: "Su salud pasó a ámbar",
     meta: "salud_verde",
     objetivo: "Vuelve a verde",
-    persona: "Si pasa a rojo, llamada en 24 horas",
+    persona: "A los 7 días, o en 24 horas si pasa a rojo",
     pasos: [
       { tipo: "mensaje", canal: "whatsapp", titulo: "¿Todo bien?", texto: "Hola {{nombre}}, vimos menos facturas esta semana en {{empresa}}. ¿Pasó algo con la DIAN o con {{erp}}?" },
       { tipo: "espera", dias: 3 },
@@ -180,26 +180,27 @@ export const CAMPANAS: Campana[] = [
     id: "renovacion",
     etapa: "Renovación",
     nombre: "Antes de renovar",
-    evento: "renovacion_45_dias",
-    disparador: "Faltan 45 días para la renovación",
+    evento: "renovacion_10_dias",
+    disparador: "Faltan 10 días para la renovación",
     meta: "renovo",
     objetivo: "Renueva",
-    persona: "Si su salud es ámbar o roja",
+    persona: "Si a los 15 días no ha renovado",
     pasos: [
+      { tipo: "mensaje", canal: "email", titulo: "Tu año con Cifrato", texto: "{{facturas_total}} facturas causadas en {{empresa}} sin digitar, en {{empresas_activas}} empresas." },
+      { tipo: "espera", dias: 15 },
       {
         tipo: "condicion",
-        pregunta: "¿Su salud es verde?",
+        pregunta: "¿Renovó?",
         ramas: [
+          { nombre: "Sí", pasos: [{ tipo: "fin", titulo: "Sale del journey" }] },
           {
-            nombre: "Sí",
+            nombre: "No",
             principal: true,
             pasos: [
-              { tipo: "mensaje", canal: "email", titulo: "Tu año con Cifrato", texto: "{{facturas_total}} facturas causadas en {{empresa}} sin digitar." },
-              { tipo: "espera", dias: 15 },
-              { tipo: "mensaje", canal: "whatsapp", titulo: "Tu renovación", texto: "Tu plan se renueva el {{fecha}}. ¿Revisamos si necesitas más empresas?" },
+              { tipo: "mensaje", canal: "whatsapp", titulo: "Tu renovación", texto: "Hola {{nombre}}, tu plan venció el {{fecha}}. ¿Lo renovamos o revisamos si necesitas más empresas?" },
+              { tipo: "tarea", titulo: "Revisión de cuenta", texto: "30 minutos para revisar uso y plan con el cliente." },
             ],
           },
-          { nombre: "No", pasos: [{ tipo: "tarea", titulo: "Revisión de cuenta", texto: "30 minutos para revisar uso y plan antes de renovar." }] },
         ],
       },
     ],
@@ -230,7 +231,7 @@ export const REGLAS_PERSONA: { salud: Salud; texto: string }[] = [
 ];
 
 export const REGLAS_FRECUENCIA = [
-  "Máximo 2 mensajes por semana por cuenta",
+  "Máximo 3 a 4 mensajes por semana por cuenta, con 2 a 3 días entre uno y otro",
   "Un journey a la vez: Renovación, luego Uso en caída, luego el resto",
   "Sin mensajes automáticos 3 días después de hablar con el especialista",
   "Grupo de control: 15 % de las cuentas nuevas no recibe journeys",
