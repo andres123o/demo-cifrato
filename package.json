@@ -6,12 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sembrar": "node --experimental-strip-types --no-warnings --env-file=.env.local scripts/sembrar.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.58.0",
+    "lucide-react": "1.48.0",
     "next": "16.4.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",

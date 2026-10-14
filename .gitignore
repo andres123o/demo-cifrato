@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Notas privadas: no se publican
+LIBRETO.md
+PLAN.md
