@@ -36,9 +36,10 @@ export function Panel({ leads, ahora }: { leads: Lead[]; ahora: number }) {
   const [abiertoId, setAbiertoId] = useState<string | null>(null);
   const [nodo, setNodo] = useState<Nodo | null>(null);
   const [campana, setCampana] = useState("bienvenida");
-  const [filtroExc, setFiltroExc] = useState<FiltroExcepciones>("abierta");
-  const abierto = leads.find((l) => l.id === abiertoId) ?? null;
   const abiertas = leads.filter(necesitaRevision).length;
+  // Sin nada pendiente, la pestaña abre con todos los casos en vez de una lista vacía.
+  const [filtroExc, setFiltroExc] = useState<FiltroExcepciones>(abiertas ? "abierta" : "todas");
+  const abierto = leads.find((l) => l.id === abiertoId) ?? null;
   const cerrarFicha = useCallback(() => setAbiertoId(null), []);
 
   function ir(v: Vista) {
