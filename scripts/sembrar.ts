@@ -58,7 +58,7 @@ const FICTICIOS: Ficticio[] = [
   // Casos confusos: la aclaración resolvió el primero sola; el segundo pasó a auditoría.
   { nombre: "Andrés Rojas", celular: "+573005550113", correo: "andres@inversionesrojas.co", fuente: "Google", empresa: "Inversiones Rojas",
     tipoEmpresa: "Empresa individual", erps: ["Siigo Pyme", "Alegra", "World Office"], facturas: "Más de 800", hace: 1, agendadoEn: 3,
-    respuestas: { erps: "De las empresas que atiendo", volumen: "De las empresas que atiendo" } },
+    respuestas: { erps: "De las empresas que atiendo", volumen: "De las empresas que atiendo" }, corregidoA: "descubrimiento" },
   { nombre: "Marcela Duarte", celular: "+573005550114", correo: "marcela@comercializadoraduarte.co", fuente: "Facebook", empresa: "Comercializadora Duarte",
     tipoEmpresa: "Empresa individual", erps: ["Siigo Nube"], facturas: "Más de 800", hace: 2, agendadoEn: 2,
     respuestas: { volumen: "Solo de mi empresa" } },
@@ -70,7 +70,8 @@ const FICTICIOS: Ficticio[] = [
     respuestas: { registro: "Aún no está registrada" } },
   // Agendó pero no respondió la aclaración.
   { nombre: "Lucía Bernal", celular: "+573005550117", correo: "lucia@agroinsumosdelllano.co", fuente: "Email", empresa: "Agroinsumos del Llano",
-    tipoEmpresa: "Empresa individual", erps: ["Siigo Pyme", "Odoo", "Loggro"], facturas: "Entre 500 y 800", hace: 1, agendadoEn: 2 },
+    tipoEmpresa: "Empresa individual", erps: ["Siigo Pyme", "Odoo", "Loggro"], facturas: "Entre 500 y 800", hace: 1, agendadoEn: 2,
+    respuestas: { erps: "No estoy seguro" } },
   // Pasó a revisión humana y el equipo la corrigió.
   { nombre: "Óscar Montoya", celular: "+573005550118", correo: "oscar@textilesmontoya.co", fuente: "Google", empresa: "Textiles Montoya",
     tipoEmpresa: "Empresa individual", erps: ["World Office"], facturas: "Más de 800", hace: 5, agendadoEn: 3,
